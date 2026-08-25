@@ -298,7 +298,7 @@ Respond ONLY with valid JSON, no markdown, no extra text, in this exact format:
 def render_home():
     logo_col = st.columns([1, 1, 1])[1]
     with logo_col:
-        st.image("assets/logo.png", use_container_width=True)
+        st.image("logo.png", use_container_width=True)
 
     st.markdown("""
     <div class="hero" style="margin-top:-10px;">
