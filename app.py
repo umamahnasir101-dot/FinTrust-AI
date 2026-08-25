@@ -245,12 +245,17 @@ Write a clear, honest recommendation in plain language:
 3. Mention any flags from calc['flags'] naturally in your reasoning.
 4. End with one practical next step.
 Keep it to 5-7 sentences, no markdown headers, warm and direct tone."""
-    resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": "Give me your recommendation."}],
-        temperature=0.3,
-    )
-    return resp.choices[0].message.content
+    for attempt in range(3):
+        try:
+            resp = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": "Give me your recommendation."}],
+                temperature=0.3,
+            )
+            return resp.choices[0].message.content
+        except Exception:
+            time.sleep(0.6)
+    return "We couldn't generate the detailed written reasoning right now, but the calculated numbers and decision above are accurate and based on your inputs."
 
 def get_scam_analysis(message_text):
     checklist_str = "\n".join([f'- "{key}": {desc}' for key, desc in SCAM_CHECK_LIST])
@@ -263,24 +268,40 @@ Respond ONLY with valid JSON, no markdown, no extra text, in this exact format:
   "verdict": "scam" or "suspicious" or "safe",
   "explanation": "2-3 sentence plain-language explanation of the verdict"
 }}"""
-    resp = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": message_text}],
-        temperature=0.2,
-    )
-    raw = resp.choices[0].message.content.strip()
-    raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
-    return json.loads(raw)
+    last_error = None
+    for attempt in range(3):
+        try:
+            resp = client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": message_text}],
+                temperature=0.2,
+            )
+            raw = resp.choices[0].message.content.strip()
+            raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+            match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+            if match:
+                raw = match.group(0)
+            return json.loads(raw)
+        except Exception as e:
+            last_error = e
+            time.sleep(0.6)
+    # Fallback so the demo never crashes even if the model misbehaves 3x in a row
+    return {
+        "checks": {k: False for k, _ in SCAM_CHECK_LIST},
+        "verdict": "suspicious",
+        "explanation": "Could not fully analyze this message right now — treat with caution and verify through official channels.",
+    }
 
 # ============================================================
 # PAGE: HOME
 # ============================================================
 def render_home():
+    logo_col = st.columns([1, 1, 1])[1]
+    with logo_col:
+        st.image("assets/logo.png", use_container_width=True)
+
     st.markdown("""
-    <div class="logo-wrap">
-        <div class="logo-shield">🛡️</div>
-    </div>
-    <div class="hero">
+    <div class="hero" style="margin-top:-10px;">
         <div style="text-align:center;"><span class="hero-badge">🚀 AI AGENT · FINTECH · TEAM FINTEL</span></div>
         <h1>FinTrust AI</h1>
         <p>Your AI guardian for financial trust. One agent, two jobs: helping you make smart investment decisions with real math, and catching scams before they catch you.</p>
